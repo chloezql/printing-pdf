@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Coloring Book PDF Maker</title>
+<script src="jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #1f2430;
+    --muted: #6b7280;
+    --line: #e3e6ea;
+    --accent: #4f46e5;
+    --accent-weak: #eef0fe;
+    --danger: #dc2626;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+  }
+  header {
+    padding: 16px 24px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header span { color: var(--muted); font-size: 13px; }
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+    padding: 20px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    margin: 0 0 14px;
+  }
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-weight: 600; margin-bottom: 5px; }
+  .field .hint { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  select, input[type="number"], input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+    color: var(--ink);
+  }
+  input[type="color"] {
+    width: 100%; height: 38px; padding: 2px; border: 1px solid var(--line);
+    border-radius: 8px; background: #fff; cursor: pointer;
+  }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+  .check input { width: 16px; height: 16px; }
+
+  .dropzone {
+    border: 2px dashed #c7ccd6;
+    border-radius: var(--radius);
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s ease;
+    background: #fafbfc;
+  }
+  .dropzone.drag { border-color: var(--accent); background: var(--accent-weak); color: var(--accent); }
+  .dropzone strong { color: var(--ink); }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+  .toolbar .summary { color: var(--muted); margin-left: auto; }
+
+  button {
+    font: inherit; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    padding: 9px 14px; border-radius: 8px;
+  }
+  button:hover { border-color: #c2c7cf; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #4338ca; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.link { border: none; background: none; color: var(--accent); padding: 6px 8px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
+  .thumb {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+    cursor: grab;
+  }
+  .thumb.dragover { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .thumb img { display: block; width: 100%; height: 110px; object-fit: contain; background: #f0f1f3; }
+  .thumb .meta { padding: 6px 8px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .thumb .badge {
+    position: absolute; top: 6px; left: 6px;
+    background: rgba(31,36,48,.85); color: #fff; font-size: 11px; font-weight: 700;
+    padding: 2px 7px; border-radius: 20px;
+  }
+  .thumb .rm {
+    position: absolute; top: 4px; right: 4px;
+    width: 22px; height: 22px; line-height: 1; padding: 0;
+    border-radius: 50%; border: none; background: rgba(220,38,38,.9); color: #fff; font-size: 14px;
+  }
+
+  .preview-wrap { margin-top: 14px; }
+  iframe {
+    width: 100%; height: 720px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  }
+  .empty-preview {
+    height: 300px; display: flex; align-items: center; justify-content: center;
+    border: 1px dashed var(--line); border-radius: 8px; color: var(--muted);
+  }
+  .status { color: var(--muted); margin-left: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎨 Coloring Book PDF Maker</h1>
+  <span>Drop images → print-ready single-sided PDF. Everything stays in your browser.</span>
+</header>
+
+<div class="layout">
+  <!-- ============ CONFIG SIDEBAR ============ -->
+  <aside class="panel">
+    <h2>PDF Settings</h2>
+
+    <div class="field">
+      <label for="pageSize">Print size</label>
+      <select id="pageSize">
+        <option value="letter" selected>US Letter (8.5 × 11 in)</option>
+        <option value="legal">US Legal (8.5 × 14 in)</option>
+        <option value="tabloid">Tabloid / Ledger (11 × 17 in)</option>
+        <option value="a3">A3 (11.69 × 16.54 in)</option>
+        <option value="a4">A4 (8.27 × 11.69 in)</option>
+        <option value="a5">A5 (5.83 × 8.27 in)</option>
+        <option value="square8">Square (8.5 × 8.5 in)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="orientation">Orientation</label>
+      <select id="orientation">
+        <option value="portrait" selected>Portrait</option>
+        <option value="landscape">Landscape</option>
+        <option value="auto">Auto (match each image)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="units">Units <span class="hint">(margin & border gap)</span></label>
+      <select id="units">
+        <option value="in" selected>Inches</option>
+        <option value="mm">Millimeters</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="margin">Margin / bleed space <span class="hint">around the image</span></label>
+      <input type="number" id="margin" value="0.5" min="0" step="0.05" />
+    </div>
+
+    <div class="field">
+      <label class="check"><input type="checkbox" id="borderOn" checked /> Add border around image</label>
+    </div>
+
+    <div class="field row">
+      <div>
+        <label for="borderWidth">Border width <span class="hint">(pt)</span></label>
+        <input type="number" id="borderWidth" value="1.5" min="0" step="0.5" />
+      </div>
+      <div>
+        <label for="borderColor">Color</label>
+        <input type="color" id="borderColor" value="#000000" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="borderPad">Border gap <span class="hint">space between image & border</span></label>
+      <input type="number" id="borderPad" value="0.12" min="0" step="0.02" />
+    </div>
+
+    <div class="field">
+      <label class="check"><input type="checkbox" id="singleSided" checked /> Single-sided <span class="hint" style="font-weight:400">(blank page after each image)</span></label>
+    </div>
+
+    <div class="field">
+      <label for="dpi">Image quality</label>
+      <select id="dpi">
+        <option value="300" selected>300 DPI (print, smaller file)</option>
+        <option value="150">150 DPI (draft)</option>
+        <option value="600">600 DPI (high)</option>
+        <option value="0">Original (no downscaling)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="filename">File name</label>
+      <input type="text" id="filename" value="coloring-book" />
+    </div>
+  </aside>
+
+  <!-- ============ MAIN AREA ============ -->
+  <main>
+    <div class="panel">
+      <h2>Images</h2>
+      <div id="dropzone" class="dropzone">
+        <p><strong>Drag &amp; drop images here</strong> or click to choose</p>
+        <p class="hint">PNG, JPG, WebP, GIF — add up to 30+ at once. Order = page order.</p>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" multiple hidden />
+
+      <div class="toolbar">
+        <button id="sortBtn">Sort by name</button>
+        <button id="clearBtn">Clear all</button>
+        <span class="summary" id="summary">No images yet</span>
+      </div>
+
+      <div id="grid" class="grid"></div>
+    </div>
+
+    <div class="panel preview-wrap">
+      <h2>Preview &amp; Download</h2>
+      <div class="toolbar">
+        <button id="previewBtn" class="primary">Generate preview</button>
+        <button id="downloadBtn" disabled>⬇ Download PDF</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div id="previewHost">
+        <div class="empty-preview">Add images and click “Generate preview”.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// Resolve jsPDF lazily so a slow/blocked library load can never stop the
+// upload UI from wiring up. We only need it at PDF-generation time.
+function getJsPDF() {
+  if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+  throw new Error('The PDF library (jspdf.umd.min.js) failed to load. Make sure it sits next to index.html.');
+}
+
+// ---------- page sizes (inches, portrait base) ----------
+const PAGE_SIZES = {
+  letter:  [8.5, 11],
+  legal:   [8.5, 14],
+  tabloid: [11, 17],
+  a3:      [11.69, 16.54],
+  a4:      [8.27, 11.69],
+  a5:      [5.83, 8.27],
+  square8: [8.5, 8.5],
+};
+
+let images = [];          // { id, name, data, fmt, width, height }
+let currentDoc = null;
+let currentBlobUrl = null;
+let uidCounter = 0;
+const uid = () => 'img' + (++uidCounter);
+
+// ---------- DOM refs ----------
+const $ = (id) => document.getElementById(id);
+const dropzone = $('dropzone');
+const fileInput = $('fileInput');
+const grid = $('grid');
+const summary = $('summary');
+const status = $('status');
+
+// ---------- file loading ----------
+function fileToImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      const mime = file.type;
+      const done = (data, fmt) => { URL.revokeObjectURL(url); resolve({ id: uid(), name: file.name, data, fmt, width: w, height: h }); };
+      if (mime === 'image/png' || mime === 'image/jpeg') {
+        const fr = new FileReader();
+        fr.onload = () => done(fr.result, mime === 'image/png' ? 'PNG' : 'JPEG');
+        fr.onerror = reject;
+        fr.readAsDataURL(file);
+      } else {
+        // webp / gif / bmp → normalize to PNG
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0);
+        done(c.toDataURL('image/png'), 'PNG');
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read ' + file.name)); };
+    img.src = url;
+  });
+}
+
+async function addFiles(fileList) {
+  const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+  if (!files.length) return;
+  status.textContent = 'Loading ' + files.length + ' image(s)…';
+  const loaded = await Promise.all(files.map(f => fileToImage(f).catch(e => { console.error(e); return null; })));
+  images.push(...loaded.filter(Boolean));
+  naturalSort();
+  status.textContent = '';
+  render();
+}
+
+function naturalSort() {
+  images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+// ---------- rendering ----------
+function render() {
+  grid.innerHTML = '';
+  images.forEach((im, i) => {
+    const el = document.createElement('div');
+    el.className = 'thumb';
+    el.draggable = true;
+    el.dataset.index = i;
+    el.innerHTML =
+      '<span class="badge">#' + (i + 1) + '</span>' +
+      '<button class="rm" title="Remove">×</button>' +
+      '<img src="' + im.data + '" alt="">' +
+      '<div class="meta">' + escapeHtml(im.name) + '</div>';
+    el.querySelector('.rm').addEventListener('click', (e) => { e.stopPropagation(); images.splice(i, 1); render(); });
+    addDnd(el, i);
+    grid.appendChild(el);
+  });
+  updateSummary();
+}
+
+function escapeHtml(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function updateSummary() {
+  const n = images.length;
+  if (!n) { summary.textContent = 'No images yet'; return; }
+  const pages = $('singleSided').checked ? n * 2 : n;
+  summary.textContent = n + ' image' + (n > 1 ? 's' : '') + ' → ' + pages + ' pages' + ($('singleSided').checked ? ' (single-sided)' : '');
+}
+
+// ---------- drag to reorder ----------
+let dragFrom = null;
+function addDnd(el, index) {
+  el.addEventListener('dragstart', () => { dragFrom = index; });
+  el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('dragover'); });
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    el.classList.remove('dragover');
+    if (dragFrom === null || dragFrom === index) return;
+    const [moved] = images.splice(dragFrom, 1);
+    images.splice(index, 0, moved);
+    dragFrom = null;
+    render();
+  });
+}
+
+// ---------- config ----------
+function readConfig() {
+  const unit = $('units').value;
+  const toIn = (v) => unit === 'mm' ? v / 25.4 : v;
+  const [pw, ph] = PAGE_SIZES[$('pageSize').value];
+  return {
+    pw, ph,
+    orientation: $('orientation').value,
+    margin: toIn(parseFloat($('margin').value) || 0),
+    borderOn: $('borderOn').checked,
+    borderWidth: (parseFloat($('borderWidth').value) || 0) / 72, // pt → in
+    borderColor: hexToRgb($('borderColor').value),
+    borderPad: toIn(parseFloat($('borderPad').value) || 0),
+    singleSided: $('singleSided').checked,
+    dpi: parseInt($('dpi').value, 10),
+  };
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function orientationFor(im, cfg) {
+  if (cfg.orientation === 'auto') return im.width >= im.height ? 'landscape' : 'portrait';
+  return cfg.orientation;
+}
+function pageDims(cfg, o) { return o === 'landscape' ? [cfg.ph, cfg.pw] : [cfg.pw, cfg.ph]; }
+
+const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+
+// ---------- pdf build ----------
+async function drawPage(doc, im, pageW, pageH, cfg) {
+  const m = cfg.margin;
+  const reserve = cfg.borderPad + cfg.borderWidth / 2; // keep border inside margin
+  const availW = Math.max(0.01, pageW - 2 * m - 2 * reserve);
+  const availH = Math.max(0.01, pageH - 2 * m - 2 * reserve);
+
+  const ar = im.width / im.height;
+  let iw = availW, ih = iw / ar;
+  if (ih > availH) { ih = availH; iw = ih * ar; }
+  const ix = (pageW - iw) / 2;
+  const iy = (pageH - ih) / 2;
+
+  // optional DPI downscale to keep file size reasonable
+  let data = im.data, fmt = im.fmt;
+  if (cfg.dpi > 0) {
+    const targetPx = Math.round(iw * cfg.dpi);
+    if (im.width > targetPx * 1.02) {
+      const scale = targetPx / im.width;
+      const cw = Math.max(1, Math.round(im.width * scale));
+      const ch = Math.max(1, Math.round(im.height * scale));
+      const cnv = document.createElement('canvas');
+      cnv.width = cw; cnv.height = ch;
+      cnv.getContext('2d').drawImage(await loadImg(im.data), 0, 0, cw, ch);
+      data = cnv.toDataURL('image/png'); fmt = 'PNG';
+    }
+  }
+
+  doc.addImage(data, fmt, ix, iy, iw, ih, undefined, 'FAST');
+
+  if (cfg.borderOn && cfg.borderWidth > 0) {
+    const off = cfg.borderPad + cfg.borderWidth / 2;
+    doc.setDrawColor(cfg.borderColor[0], cfg.borderColor[1], cfg.borderColor[2]);
+    doc.setLineWidth(cfg.borderWidth);
+    doc.rect(ix - off, iy - off, iw + 2 * off, ih + 2 * off, 'S');
+  }
+}
+
+async function buildDoc() {
+  const cfg = readConfig();
+  let doc = null;
+  for (let i = 0; i < images.length; i++) {
+    const im = images[i];
+    const o = orientationFor(im, cfg);
+    const [w, h] = pageDims(cfg, o);
+    if (!doc) { const JsPDF = getJsPDF(); doc = new JsPDF({ unit: 'in', orientation: o, format: [w, h] }); }
+    else doc.addPage([w, h], o);
+    status.textContent = 'Rendering page ' + (i + 1) + ' / ' + images.length + '…';
+    await drawPage(doc, im, w, h, cfg);
+    if (cfg.singleSided) doc.addPage([w, h], o); // blank back page
+  }
+  return doc;
+}
+
+async function generate() {
+  if (!images.length) { alert('Add some images first.'); return; }
+  $('previewBtn').disabled = true;
+  try {
+    currentDoc = await buildDoc();
+    if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+    currentBlobUrl = currentDoc.output('bloburl');
+    $('previewHost').innerHTML = '<iframe src="' + currentBlobUrl + '"></iframe>';
+    $('downloadBtn').disabled = false;
+    status.textContent = 'Done.';
+  } catch (e) {
+    console.error(e);
+    status.textContent = '';
+    alert('Something went wrong generating the PDF: ' + e.message);
+  } finally {
+    $('previewBtn').disabled = false;
+  }
+}
+
+async function download() {
+  if (!currentDoc) await generate();
+  if (!currentDoc) return;
+  const name = ($('filename').value || 'coloring-book').replace(/\.pdf$/i, '');
+  currentDoc.save(name + '.pdf');
+}
+
+// ---------- events ----------
+// Stop the browser from opening files dropped anywhere outside the dropzone.
+['dragover', 'drop'].forEach(ev => window.addEventListener(ev, (e) => e.preventDefault()));
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => { addFiles(e.target.files); fileInput.value = ''; });
+['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', (e) => addFiles(e.dataTransfer.files));
+
+$('sortBtn').addEventListener('click', () => { naturalSort(); render(); });
+$('clearBtn').addEventListener('click', () => { images = []; render(); $('previewHost').innerHTML = '<div class="empty-preview">Add images and click “Generate preview”.</div>'; $('downloadBtn').disabled = true; currentDoc = null; });
+$('singleSided').addEventListener('change', updateSummary);
+$('previewBtn').addEventListener('click', generate);
+$('downloadBtn').addEventListener('click', download);
+
+render();
+</script>
+</body>
+</html>

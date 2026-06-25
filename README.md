@@ -46,19 +46,18 @@ python3 -m http.server 8000
 Tip: name your source files `01.png`, `02.png`, … and use **Sort by name** so pages land in
 order. You can also drag thumbnails to reorder, or click **×** to remove one.
 
-## Host it on GitHub Pages
+## Hosted on GitHub Pages
 
-This is a static site, so GitHub Pages serves it for free:
+Live at **https://chloezql.github.io/printing-pdf/**
 
-1. Commit and push `index.html`:
-   ```bash
-   git add index.html README.md .gitignore
-   git commit -m "Add coloring book PDF maker"
-   git push -u origin main
-   ```
-2. On GitHub: **Settings → Pages → Build and deployment → Source: Deploy from a branch**,
-   pick `main` / `root`, save.
-3. After a minute it's live at `https://chloezql.github.io/printing-pdf/`.
+Pages is configured to **deploy from a branch** (`main`, root folder). To update the
+live site, just push to `main` — GitHub rebuilds it automatically within a minute:
+
+```bash
+git add -A
+git commit -m "Update tool"
+git push
+```
 
 ## Tech
 
